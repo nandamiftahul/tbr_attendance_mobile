@@ -237,6 +237,17 @@ class Api {
       throw Exception(j["error"] ?? "Reject failed");
     }
   }
+
+  // ---- NEW: announcements API ----
+  Future<List<Map<String, dynamic>>> announcementsActive() async {
+    final res = await dio.get('/api/announcements/active');
+    final j = _json(res);
+    if (res.statusCode != 200 || j["ok"] != true) {
+      throw Exception(j["error"] ?? "Load announcements failed");
+    }
+    final rows = (j["rows"] as List).cast<dynamic>();
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
 }
 
 // ---------- App ----------
@@ -537,6 +548,39 @@ class _HomePageState extends State<HomePage> {
   String lastAction = "";
   String lastTime = "";
 
+  // --- Announcements (NEW) ---
+  bool annBusy = true;
+  String annErr = "";
+  List<Map<String, dynamic>> annRows = [];
+
+
+
+  Future<void> _loadAnnouncements() async {
+    setState(() {
+      annBusy = true;
+      annErr = "";
+      annRows = [];
+    });
+    try {
+      final rows = await widget.api.announcementsActive();
+      setState(() {
+        annRows = rows;
+        annBusy = false;
+      });
+    } catch (e) {
+      setState(() {
+        annErr = "$e";
+        annBusy = false;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnnouncements();
+  }
+
   Future<Position?> _getPos() async {
     final enabled = await Geolocator.isLocationServiceEnabled();
     if (!enabled) return null;
@@ -632,11 +676,117 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
+
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text("Announcements", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ),
+                      IconButton(
+                        onPressed: annBusy ? null : _loadAnnouncements,
+                        icon: const Icon(Icons.refresh, size: 20),
+                        tooltip: "Refresh",
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (annBusy) const LinearProgressIndicator(minHeight: 4),
+                  if (!annBusy && annErr.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(annErr, style: const TextStyle(color: Colors.redAccent)),
+                  ],
+                  if (!annBusy && annErr.isEmpty && annRows.isEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text("No announcements.", style: TextStyle(color: Colors.white70)),
+                  ],
+                  for (final a in annRows) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withOpacity(0.10)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  (a["title"] ?? "-").toString(),
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              _AnnouncementPill(level: (a["level"] ?? "info").toString()),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            (a["body"] ?? "").toString(),
+                            style: TextStyle(color: Colors.white.withOpacity(0.82)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(
+                    "Info dari admin (berita duka, libur, cuti bersama, dll).",
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  )
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
+
+
+class _AnnouncementPill extends StatelessWidget {
+  final String level;
+  const _AnnouncementPill({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    final lv = level.toLowerCase();
+    Color bg = Colors.white.withOpacity(0.10);
+    String text = "INFO";
+
+    if (lv == "danger") {
+      bg = Colors.redAccent.withOpacity(0.18);
+      text = "IMPORTANT";
+    } else if (lv == "warning") {
+      bg = kTbrOrange.withOpacity(0.18);
+      text = "NOTICE";
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.4),
+      ),
+    );
+  }
+}
+
 
 // ---------- Leave Page ----------
 class LeavePage extends StatefulWidget {
