@@ -211,6 +211,28 @@ class Api {
     }
   }
 
+
+  Future<void> updateProfile({
+    required String phone,
+    required String address,
+    required String birthDate, // YYYY-MM-DD (optional)
+    required String ktpNumber,
+  }) async {
+    final res = await dio.post(
+      '/api/profile/update',
+      data: jsonEncode({
+        "phone": phone,
+        "address": address,
+        "birth_date": birthDate,
+        "ktp_number": ktpNumber,
+      }),
+    );
+    final j = _json(res);
+    if (res.statusCode != 200 || j["ok"] != true) {
+      throw Exception(j["error"] ?? "Profile update failed");
+    }
+  }
+
   // ---- NEW: approvals API ----
   Future<List<Map<String, dynamic>>> approvalsList() async {
     final res = await dio.get('/api/leave/approvals');
@@ -1476,6 +1498,12 @@ class _ProfilePageState extends State<ProfilePage> {
   final oldPw = TextEditingController();
   final newPw = TextEditingController();
 
+  // --- Edit Profile (NEW) ---
+  final pfPhone = TextEditingController();
+  final pfAddress = TextEditingController();
+  final pfBirthDate = TextEditingController(); // YYYY-MM-DD
+  final pfKtp = TextEditingController();
+
   Future<void> _load() async {
     setState(() {
       busy = true;
@@ -1483,11 +1511,29 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     try {
       me = await widget.api.me();
+
+      // fill edit profile form from employee (same as mobile_app.html)
+      final emp = me?["employee"] as Map<String, dynamic>?;
+      pfPhone.text = (emp?["phone"] ?? "").toString();
+      pfAddress.text = (emp?["address"] ?? "").toString();
+      pfBirthDate.text = (emp?["birth_date"] ?? "").toString();
+      pfKtp.text = (emp?["ktp_number"] ?? "").toString();
     } catch (e) {
       msg = "$e";
     } finally {
       setState(() => busy = false);
     }
+  }
+
+  @override
+  void dispose() {
+    oldPw.dispose();
+    newPw.dispose();
+    pfPhone.dispose();
+    pfAddress.dispose();
+    pfBirthDate.dispose();
+    pfKtp.dispose();
+    super.dispose();
   }
 
   Future<void> _changePw() async {
@@ -1506,6 +1552,65 @@ class _ProfilePageState extends State<ProfilePage> {
       oldPw.clear();
       newPw.clear();
       setState(() => msg = "Password updated.");
+    } catch (e) {
+      setState(() => msg = "$e");
+    } finally {
+      setState(() => busy = false);
+    }
+  }
+
+
+
+  ThemeData _pickerTheme() {
+    return ThemeData.dark().copyWith(
+      colorScheme: const ColorScheme.dark(
+        primary: kTbrOrange,
+        onPrimary: Colors.black,
+        surface: Colors.black,
+        onSurface: Colors.white,
+      ),
+      dialogBackgroundColor: Colors.black,
+    );
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    DateTime initial = now;
+    if (pfBirthDate.text.trim().isNotEmpty) {
+      try {
+        initial = DateTime.parse(pfBirthDate.text.trim());
+      } catch (_) {}
+    }
+    final d = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year - 80, 1, 1),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDate: initial,
+      builder: (context, child) => Theme(data: _pickerTheme(), child: child!),
+    );
+    if (d != null) {
+      pfBirthDate.text = DateFormat("yyyy-MM-dd").format(d);
+      setState(() {}); // refresh UI
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    setState(() {
+      busy = true;
+      msg = "";
+    });
+    try {
+      await widget.api.updateProfile(
+        phone: pfPhone.text.trim(),
+        address: pfAddress.text.trim(),
+        birthDate: pfBirthDate.text.trim(),
+        ktpNumber: pfKtp.text.trim(),
+      );
+
+      // reload profile info
+      await _load();
+
+      setState(() => msg = "Profile updated.");
     } catch (e) {
       setState(() => msg = "$e");
     } finally {
@@ -1551,7 +1656,7 @@ class _ProfilePageState extends State<ProfilePage> {
           if (busy) const LinearProgressIndicator(minHeight: 4),
           if (msg.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(msg, style: TextStyle(color: msg == "Password updated." ? kTbrOrange : Colors.redAccent)),
+            Text(msg, style: TextStyle(color: msg == "Password updated." || msg == "Profile updated." ? kTbrOrange : Colors.redAccent)),
           ],
           const SizedBox(height: 10),
           Card(
@@ -1595,6 +1700,51 @@ class _ProfilePageState extends State<ProfilePage> {
                       onPressed: busy ? null : _changePw,
                       icon: const Icon(Icons.lock_reset),
                       label: const Text("Update"),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Edit Profile", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  TextField(controller: pfPhone, decoration: const InputDecoration(labelText: "Nomor HP", hintText: "08xxxxxxxxxx")),
+                  const SizedBox(height: 10),
+                  TextField(controller: pfAddress, decoration: const InputDecoration(labelText: "Alamat", hintText: "Alamat lengkap")),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: pfBirthDate,
+                          readOnly: true,
+                          onTap: busy ? null : _pickBirthDate,
+                          decoration: const InputDecoration(labelText: "Tanggal Lahir"),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: pfKtp,
+                          decoration: const InputDecoration(labelText: "Nomor KTP", hintText: "16 digit (opsional)"),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : _saveProfile,
+                      icon: const Icon(Icons.save),
+                      label: const Text("Save"),
                     ),
                   ),
                 ],
