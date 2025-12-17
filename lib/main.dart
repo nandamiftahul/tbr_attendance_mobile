@@ -914,6 +914,8 @@ class _LeavePageState extends State<LeavePage> {
                       DropdownMenuItem(value: "sick", child: Text("Sick")),
                       DropdownMenuItem(value: "wfh", child: Text("WFH")),
                       DropdownMenuItem(value: "on_site", child: Text("On Site Duty")),
+                      DropdownMenuItem(value: "late_work", child: Text("Late")),
+                      DropdownMenuItem(value: "early_finish", child: Text("Go home early")),
                     ],
                     onChanged: busy ? null : (v) => setState(() => type = v ?? "leave"),
                     decoration: const InputDecoration(labelText: "Type"),
@@ -1353,10 +1355,16 @@ class _DayRow extends StatelessWidget {
         return Colors.greenAccent;
       case "late":
         return kTbrOrange;
+      case "late_work":
+        return kTbrOrange;
+      case "early_finish":
+        return kTbrOrange;
       case "absent":
         return Colors.redAccent;
       case "leave":
+        return Colors.redAccent;
       case "sick":
+        return Colors.redAccent;
       case "wfh":
         return Colors.lightBlueAccent;
       case "on_site":
